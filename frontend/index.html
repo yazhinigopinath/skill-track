@@ -48,6 +48,8 @@
 
 <script src="../js/app.js"></script>
 <script>
+window.addEventListener('DOMContentLoaded', () => {
+
   // Redirect if already logged in
   if (Auth.isLoggedIn()) {
     const role = Auth.getUser()?.role;
@@ -56,13 +58,13 @@
 
   function redirectByRole(role) {
     const map = {
-      admin: 'admin-dashboard.html',
-      super_admin: 'admin-dashboard.html',
-      trainer: 'trainer-dashboard.html',
-      student: 'student-dashboard.html',
-      marketer: 'marketer-dashboard.html',
+      admin: '/frontend/html/admin-dashboard.html',
+      super_admin: '/frontend/html/admin-dashboard.html',
+      trainer: '/frontend/html/trainer-dashboard.html',
+      student: '/frontend/html/student-dashboard.html',
+      marketer: '/frontend/html/marketer-dashboard.html',
     };
-    window.location.href = map[role] || 'admin-dashboard.html';
+    window.location.href = map[role] || '/frontend/html/admin-dashboard.html';
   }
 
   function fillDemo(email, pw) {
@@ -75,7 +77,7 @@
       <div class="alert alert-${type}">${msg}</div>;
   }
 
-  // 🔥 DEMO LOGIN (NO BACKEND)
+  // 🔥 DEMO LOGIN
   document.getElementById('login-form').addEventListener('submit', (e) => {
     e.preventDefault();
 
@@ -112,6 +114,8 @@
       btn.disabled = false;
     }
   });
+
+});
 </script>
 </body>
 </html>
