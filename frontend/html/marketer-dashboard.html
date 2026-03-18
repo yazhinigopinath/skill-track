@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketer Dashboard — Skill Track</title>
+<link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">Marketing Dashboard</div>
+        <span class="breadcrumb">/ lead management</span>
+      </div>
+      <div class="topbar-right">
+        <a href="leads.html" class="btn btn-primary btn-sm">+ New Lead</a>
+      </div>
+    </div>
+    <div class="page-content">
+
+      <div class="mb-20">
+        <h2 id="welcome-msg">Marketing Overview 📣</h2>
+        <p class="text-muted fs-13">Track leads, conversions, and outreach performance.</p>
+      </div>
+
+      <div class="stats-grid" id="mkt-stats">
+        <div class="stat-card blue"><div class="stat-icon">🎯</div><div class="stat-value" id="s-total">—</div><div class="stat-label">Total Leads</div></div>
+        <div class="stat-card yellow"><div class="stat-icon">🔔</div><div class="stat-value" id="s-new">—</div><div class="stat-label">New Leads</div></div>
+        <div class="stat-card green"><div class="stat-icon">🏆</div><div class="stat-value" id="s-converted">—</div><div class="stat-label">Converted</div></div>
+        <div class="stat-card red"><div class="stat-icon">❌</div><div class="stat-value" id="s-lost">—</div><div class="stat-label">Lost</div></div>
+      </div>
+
+      <div class="grid-2" style="gap:20px">
+        <!-- Pipeline -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Lead Pipeline</div><a href="leads.html" class="btn btn-outline btn-sm">Manage</a></div>
+          <div id="pipeline-chart"></div>
+        </div>
+
+        <!-- Follow-ups -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Upcoming Follow-ups</div></div>
+          <div id="followups-list"><div class="text-center text-muted" style="padding:24px">Loading…</div></div>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div class="card-header"><div class="card-title">Recent Leads</div><a href="leads.html" class="btn btn-outline btn-sm">All Leads</a></div>
+        <div class="table-wrap" style="border:none">
+          <table>
+            <thead><tr><th>Name</th><th>Phone</th><th>Source</th><th>Course Interest</th><th>Status</th><th>Follow-up</th></tr></thead>
+            <tbody id="recent-leads-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Dashboard');
+  const user = Auth.getUser();
+  if (user) document.getElementById('welcome-msg').textContent = `Hello, ${user.username} 📣`;
+
+  const STATUS_ORDER = ['New','Contacted','Interested','Follow-up','Converted','Lost'];
+  const STATUS_COLORS = { New:'blue',Contacted:'blue',Interested:'yellow','Follow-up':'yellow',Converted:'green',Lost:'red' };
+
+  async function loadDashboard() {
+    try {
+      const [leads, stats] = await Promise.all([
+        api.get('/leads/'),
+        api.get('/leads/stats'),
+      ]);
+
+      document.getElementById('s-total').textContent = leads.length;
+      document.getElementById('s-new').textContent = leads.filter(l=>l.status==='New').length;
+      document.getElementById('s-converted').textContent = leads.filter(l=>l.status==='Converted').length;
+      document.getElementById('s-lost').textContent = leads.filter(l=>l.status==='Lost').length;
+
+      // Pipeline chart (bar visualization)
+      const pipeline = document.getElementById('pipeline-chart');
+      const statusCounts = {};
+      STATUS_ORDER.forEach(s => statusCounts[s] = 0);
+      leads.forEach(l => statusCounts[l.status] = (statusCounts[l.status]||0)+1);
+      const maxCount = Math.max(...Object.values(statusCounts), 1);
+      pipeline.innerHTML = STATUS_ORDER.map(s => `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="width:90px;font-size:12px;color:var(--muted);text-align:right;flex-shrink:0">${s}</div>
+          <div style="flex:1;background:var(--bg3);border-radius:4px;overflow:hidden;height:22px">
+            <div style="height:100%;width:${(statusCounts[s]/maxCount)*100}%;background:var(--accent);border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:11px;font-weight:600;transition:width 0.6s ease">${statusCounts[s]}</div>
+          </div>
+        </div>`).join('');
+
+      // Follow-ups
+      const today = new Date().toISOString().split('T')[0];
+      const upcoming = leads.filter(l=>l.next_followup_date && l.next_followup_date >= today && l.status !== 'Converted').sort((a,b)=>a.next_followup_date.localeCompare(b.next_followup_date)).slice(0,6);
+      const fuEl = document.getElementById('followups-list');
+      fuEl.innerHTML = upcoming.length ? upcoming.map(l=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="flex:1"><div class="fw-600 fs-13">${l.full_name}</div><div class="mono fs-12 text-muted">${l.phone||'—'}</div></div>
+          <div class="mono fs-12 text-warning">${fmtDate(l.next_followup_date)}</div>
+          ${statusBadge(l.status)}
+        </div>`).join('') : '<div class="text-center text-muted" style="padding:24px">No upcoming follow-ups</div>';
+
+      // Recent leads table
+      const tbody = document.getElementById('recent-leads-tbody');
+      tbody.innerHTML = leads.slice(0,10).map(l=>`<tr>
+        <td><div class="fw-600">${l.full_name}</div><div class="mono fs-12 text-muted">${l.email||'—'}</div></td>
+        <td>${l.phone||'—'}</td>
+        <td><span class="badge badge-gray">${l.source}</span></td>
+        <td>${l.interested_course||'—'}</td>
+        <td>${statusBadge(l.status)}</td>
+        <td class="mono fs-12">${fmtDate(l.next_followup_date)}</td>
+      </tr>`).join('');
+
+    } catch(e) { toast(e.message,'error'); }
+  }
+  loadDashboard();
+</script>
+</body>
+</html>

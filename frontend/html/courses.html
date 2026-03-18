@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Courses — Skill Track</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Courses</span>
+        <span class="breadcrumb">Admin / Courses</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary" onclick="openModal('add-course-modal')">+ Add Course</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div id="courses-grid" class="grid-3">
+        <div class="text-muted text-center" style="grid-column:span 3;padding:40px"><span class="spinner"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Course Modal -->
+<div class="modal-backdrop" id="add-course-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="course-modal-title">Add New Course</h3>
+      <button class="btn btn-icon btn-outline" onclick="closeModal('add-course-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="course-alert"></div>
+      <input type="hidden" id="c-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Course Code *</label>
+          <input type="text" id="c-code" required placeholder="PY101">
+        </div>
+        <div class="form-group">
+          <label>Title *</label>
+          <input type="text" id="c-title" required placeholder="Python Full Stack Development">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Duration (weeks)</label>
+          <input type="number" id="c-duration" min="1" value="12">
+        </div>
+        <div class="form-group">
+          <label>Fee (₹)</label>
+          <input type="number" id="c-fee" min="0" placeholder="35000">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="c-desc" rows="3" placeholder="Course overview and what students will learn…"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="c-status">
+          <option value="Active">Active</option>
+          <option value="Archived">Archived</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('add-course-modal')">Cancel</button>
+      <button class="btn btn-primary" id="course-save-btn" onclick="saveCourse()">Save Course</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Courses');
+  let allCourses = [];
+  const icons = ['🐍','📊','🌐','⚡','🤖','🔐','📱','☁️','🗄','🎨'];
+
+  async function loadCourses() {
+    try {
+      allCourses = await api.get('/courses/');
+      renderCourses(allCourses);
+    } catch(e) {
+      document.getElementById('courses-grid').innerHTML =
+        '<div class="text-muted text-center" style="grid-column:span 3;padding:40px">Failed to load courses. Is backend running?</div>';
+    }
+  }
+
+  function renderCourses(data) {
+    const grid = document.getElementById('courses-grid');
+    if (!data.length) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:span 3">
+        <div class="empty-icon">📚</div><h3>No Courses</h3>
+        <p>Add your first course to get started</p>
+        <button class="btn btn-primary mt-16" onclick="openModal('add-course-modal')">+ Add Course</button>
+      </div>`;
+      return;
+    }
+    grid.innerHTML = data.map((c, i) => `
+      <div class="card">
+        <div class="flex-between mb-12">
+          <span style="font-size:28px">${icons[i % icons.length]}</span>
+          ${statusBadge(c.status)}
+        </div>
+        <div class="mono text-accent fs-12 mb-4">${c.course_code}</div>
+        <div class="fw-700" style="font-size:16px;margin-bottom:8px">${c.title}</div>
+        <div class="text-muted fs-13 mb-16" style="
+          display:-webkit-box;-webkit-line-clamp:2;
+          -webkit-box-orient:vertical;overflow:hidden;min-height:40px">
+          ${c.description || 'No description provided.'}
+        </div>
+        <div class="grid-2 mb-16" style="gap:8px">
+          <div style="background:var(--bg3);border-radius:var(--radius-sm);padding:10px">
+            <div class="text-muted fs-11 mono mb-2">DURATION</div>
+            <div class="fw-700">${c.duration_weeks || '—'} <span class="text-muted fw-400">wks</span></div>
+          </div>
+          <div style="background:var(--bg3);border-radius:var(--radius-sm);padding:10px">
+            <div class="text-muted fs-11 mono mb-2">FEE</div>
+            <div class="fw-700 text-accent">₹${Number(c.fee || 0).toLocaleString('en-IN')}</div>
+          </div>
+        </div>
+        <div class="flex gap-8">
+          <button class="btn btn-outline btn-sm" onclick="editCourse(${c.id})">✏️ Edit</button>
+          <a href="batches.html" class="btn btn-outline btn-sm">🗂 Batches</a>
+        </div>
+      </div>`).join('');
+  }
+
+  async function saveCourse() {
+    const id = document.getElementById('c-id').value;
+    const btn = document.getElementById('course-save-btn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+    try {
+      if (id) {
+        await api.put(`/courses/${id}`, {
+          title: document.getElementById('c-title').value,
+          description: document.getElementById('c-desc').value,
+          fee: parseFloat(document.getElementById('c-fee').value) || 0,
+          status: document.getElementById('c-status').value,
+        });
+        toast('Course updated', 'success');
+      } else {
+        await api.post('/courses/', {
+          course_code: document.getElementById('c-code').value,
+          title: document.getElementById('c-title').value,
+          description: document.getElementById('c-desc').value,
+          duration_weeks: parseInt(document.getElementById('c-duration').value) || 12,
+          fee: parseFloat(document.getElementById('c-fee').value) || 0,
+        });
+        toast('Course added successfully', 'success');
+      }
+      closeModal('add-course-modal');
+      loadCourses();
+    } catch(e) {
+      document.getElementById('course-alert').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    } finally {
+      btn.disabled = false; btn.innerHTML = 'Save Course';
+    }
+  }
+
+  function editCourse(id) {
+    const c = allCourses.find(x => x.id === id);
+    if (!c) return;
+    document.getElementById('course-modal-title').textContent = 'Edit Course';
+    document.getElementById('c-id').value = c.id;
+    document.getElementById('c-code').value = c.course_code;
+    document.getElementById('c-title').value = c.title;
+    document.getElementById('c-desc').value = c.description || '';
+    document.getElementById('c-duration').value = c.duration_weeks || 12;
+    document.getElementById('c-fee').value = c.fee || 0;
+    document.getElementById('c-status').value = c.status;
+    document.getElementById('c-code').disabled = true; // can't change code
+    openModal('add-course-modal');
+  }
+
+  // Reset form when opening fresh
+  document.getElementById('add-course-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal('add-course-modal');
+  });
+
+  function resetCourseForm() {
+    document.getElementById('course-modal-title').textContent = 'Add New Course';
+    document.getElementById('c-id').value = '';
+    document.getElementById('c-code').disabled = false;
+    document.getElementById('course-alert').innerHTML = '';
+    document.querySelector('#add-course-modal form')?.reset?.();
+    ['c-code','c-title','c-desc','c-duration','c-fee'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = id === 'c-duration' ? '12' : '';
+    });
+    document.getElementById('c-status').value = 'Active';
+  }
+
+  document.querySelector('[onclick="openModal(\'add-course-modal\')"]').addEventListener('click', resetCourseForm);
+
+  loadCourses();
+</script>
+</body>
+</html>

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leads — Skill Track</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Leads</span>
+        <span class="breadcrumb">Marketing / Leads</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary" onclick="openModal('add-lead-modal')">+ Add Lead</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- Stats row -->
+      <div id="lead-stats" class="stats-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:20px"></div>
+
+      <div class="toolbar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Search leads…">
+        </div>
+        <select id="status-filter" style="width:140px">
+          <option value="">All Status</option>
+          <option>New</option><option>Contacted</option><option>Interested</option>
+          <option>Follow-up</option><option>Converted</option><option>Lost</option>
+        </select>
+        <select id="source-filter" style="width:140px">
+          <option value="">All Sources</option>
+          <option>Website</option><option>WhatsApp</option><option>Referral</option>
+          <option>Social Media</option><option>Walk-in</option><option>Email</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th><th>Contact</th><th>Source</th><th>Interested In</th>
+                <th>Status</th><th>Follow-up</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody">
+              <tr><td colspan="7" class="text-center" style="padding:40px"><span class="spinner"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Lead Modal -->
+<div class="modal-backdrop" id="add-lead-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add New Lead</h3>
+      <button class="btn btn-icon btn-outline" onclick="closeModal('add-lead-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="lead-alert"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" id="l-name" required placeholder="Rahul Kumar">
+        </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="tel" id="l-phone" placeholder="9xxxxxxxxx">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="l-email" placeholder="rahul@email.com">
+        </div>
+        <div class="form-group">
+          <label>Source</label>
+          <select id="l-source">
+            <option>Website</option><option>WhatsApp</option><option>Referral</option>
+            <option>Social Media</option><option>Walk-in</option><option>Email</option><option>Phone</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Interested Course</label>
+        <input type="text" id="l-course" placeholder="Python Full Stack, Data Science…">
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea id="l-notes" rows="2" placeholder="Initial enquiry details…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('add-lead-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLead()">Save Lead</button>
+    </div>
+  </div>
+</div>
+
+<!-- Update Lead Modal -->
+<div class="modal-backdrop" id="update-lead-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Update Lead</h3>
+      <button class="btn btn-icon btn-outline" onclick="closeModal('update-lead-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ul-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Status</label>
+          <select id="ul-status">
+            <option>New</option><option>Contacted</option><option>Interested</option>
+            <option>Follow-up</option><option>Converted</option><option>Lost</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Next Follow-up</label>
+          <input type="date" id="ul-followup">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea id="ul-notes" rows="3"></textarea>
+      </div>
+      <hr style="border-color:var(--border);margin:16px 0">
+      <div class="card-title mb-8">Log Communication</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Channel</label>
+          <select id="ul-comm-type">
+            <option>Call</option><option>WhatsApp</option><option>Email</option><option>SMS</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Message / Summary</label>
+          <input type="text" id="ul-comm-msg" placeholder="Discussed course fees…">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('update-lead-modal')">Cancel</button>
+      <button class="btn btn-success btn-sm" onclick="logComm()">📞 Log Comm</button>
+      <button class="btn btn-primary" onclick="updateLead()">Update Lead</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Leads');
+  let allLeads = [];
+
+  async function loadLeads() {
+    try {
+      allLeads = await api.get('/leads/');
+      renderLeads(allLeads);
+      loadStats();
+    } catch(e) {
+      document.getElementById('leads-tbody').innerHTML =
+        '<tr><td colspan="7" class="text-center text-muted" style="padding:40px">Failed to load leads</td></tr>';
+    }
+  }
+
+  async function loadStats() {
+    try {
+      const stats = await api.get('/leads/stats');
+      const colors = {New:'blue',Contacted:'blue',Interested:'yellow','Follow-up':'yellow',Converted:'green',Lost:'red'};
+      const total = stats.reduce((a,b) => a+b.count, 0);
+      document.getElementById('lead-stats').innerHTML =
+        [{status:'Total',count:total,color:'purple'}, ...stats.map(s=>({...s,color:colors[s.status]||'gray'}))]
+        .map(s => `
+          <div class="stat-card ${s.color||'gray'}">
+            <div class="stat-value">${s.count}</div>
+            <div class="stat-label">${s.status}</div>
+          </div>`).join('');
+    } catch(e) {}
+  }
+
+  function renderLeads(data) {
+    const tbody = document.getElementById('leads-tbody');
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🎯</div><h3>No Leads</h3><p>Add your first lead to start tracking</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(l => `
+      <tr>
+        <td class="fw-600">${l.full_name}</td>
+        <td>
+          <div class="fs-12">${l.phone||'—'}</div>
+          <div class="fs-12 text-muted">${l.email||''}</div>
+        </td>
+        <td><span class="badge badge-gray">${l.source}</span></td>
+        <td class="text-muted fs-12">${l.interested_course||'—'}</td>
+        <td>${statusBadge(l.status)}</td>
+        <td class="text-muted fs-12">${fmtDate(l.next_followup_date)}</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="openUpdate(${l.id})">Update</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  async function saveLead() {
+    try {
+      await api.post('/leads/', {
+        full_name: document.getElementById('l-name').value,
+        phone: document.getElementById('l-phone').value,
+        email: document.getElementById('l-email').value,
+        source: document.getElementById('l-source').value,
+        interested_course: document.getElementById('l-course').value,
+        notes: document.getElementById('l-notes').value,
+      });
+      toast('Lead added', 'success');
+      closeModal('add-lead-modal');
+      loadLeads();
+    } catch(e) {
+      document.getElementById('lead-alert').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    }
+  }
+
+  function openUpdate(id) {
+    const lead = allLeads.find(l => l.id === id);
+    if (!lead) return;
+    document.getElementById('ul-id').value = id;
+    document.getElementById('ul-status').value = lead.status;
+    document.getElementById('ul-notes').value = lead.notes||'';
+    document.getElementById('ul-followup').value = lead.next_followup_date||'';
+    document.getElementById('ul-comm-msg').value = '';
+    openModal('update-lead-modal');
+  }
+
+  async function updateLead() {
+    const id = document.getElementById('ul-id').value;
+    try {
+      await api.put(`/leads/${id}`, {
+        status: document.getElementById('ul-status').value,
+        notes: document.getElementById('ul-notes').value,
+        next_followup_date: document.getElementById('ul-followup').value,
+      });
+      toast('Lead updated', 'success');
+      closeModal('update-lead-modal');
+      loadLeads();
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  async function logComm() {
+    const id = document.getElementById('ul-id').value;
+    const msg = document.getElementById('ul-comm-msg').value;
+    if (!msg) { toast('Enter a message to log', 'error'); return; }
+    try {
+      await api.post(`/leads/${id}/communicate`, {
+        comm_type: document.getElementById('ul-comm-type').value,
+        message: msg,
+      });
+      toast('Communication logged', 'success');
+      document.getElementById('ul-comm-msg').value = '';
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  // Filters
+  function applyFilters() {
+    const q = document.getElementById('search-input').value.toLowerCase();
+    const status = document.getElementById('status-filter').value;
+    const source = document.getElementById('source-filter').value;
+    renderLeads(allLeads.filter(l =>
+      (!q || (l.full_name+l.email+l.phone).toLowerCase().includes(q)) &&
+      (!status || l.status === status) &&
+      (!source || l.source === source)
+    ));
+  }
+  document.getElementById('search-input').addEventListener('input', applyFilters);
+  document.getElementById('status-filter').addEventListener('change', applyFilters);
+  document.getElementById('source-filter').addEventListener('change', applyFilters);
+
+  loadLeads();
+</script>
+</body>
+</html>

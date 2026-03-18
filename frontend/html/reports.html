@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports — Skill Track</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Reports & Analytics</span>
+        <span class="breadcrumb">Analytics / Reports</span>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('attendance',this)">Attendance</button>
+        <button class="tab-btn" onclick="showTab('projects',this)">Project Violations</button>
+        <button class="tab-btn" onclick="showTab('assessments',this)">Assessments</button>
+        <button class="tab-btn" onclick="showTab('overview',this)">Overview</button>
+      </div>
+
+      <!-- ATTENDANCE VIOLATIONS -->
+      <div id="tab-attendance">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Attendance Violations <span class="badge badge-red" id="att-count">—</span></span>
+            <span class="text-muted fs-12">Students with &lt;75% attendance</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student ID</th><th>Name</th><th>Total Days</th><th>Present</th><th>Attendance %</th><th>Risk</th></tr></thead>
+              <tbody id="att-tbody">
+                <tr><td colspan="6" class="text-center" style="padding:40px"><span class="spinner"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROJECT VIOLATIONS -->
+      <div id="tab-projects" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Overdue Tasks <span class="badge badge-red" id="proj-count">—</span></span>
+            <span class="text-muted fs-12">Tasks past deadline, not completed</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Project</th><th>Task</th><th>Deadline</th><th>Priority</th><th>Days Overdue</th></tr></thead>
+              <tbody id="proj-tbody">
+                <tr><td colspan="6" class="text-center" style="padding:40px"><span class="spinner"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ASSESSMENT VIOLATIONS -->
+      <div id="tab-assessments" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Assessment Fails & Absences <span class="badge badge-red" id="assess-count">—</span></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Student</th><th>Assessment</th><th>Score</th><th>Pass Marks</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody id="assess-tbody">
+                <tr><td colspan="6" class="text-center" style="padding:40px"><span class="spinner"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- OVERVIEW -->
+      <div id="tab-overview" style="display:none">
+        <div class="stats-grid mb-20">
+          <div class="stat-card blue"><div class="stat-value" id="ov-students">—</div><div class="stat-label">Active Students</div></div>
+          <div class="stat-card green"><div class="stat-value" id="ov-trainers">—</div><div class="stat-label">Trainers</div></div>
+          <div class="stat-card purple"><div class="stat-value" id="ov-batches">—</div><div class="stat-label">Active Batches</div></div>
+          <div class="stat-card yellow"><div class="stat-value" id="ov-courses">—</div><div class="stat-label">Courses</div></div>
+          <div class="stat-card blue"><div class="stat-value" id="ov-jobs">—</div><div class="stat-label">Open Jobs</div></div>
+          <div class="stat-card red"><div class="stat-value" id="ov-leads">—</div><div class="stat-label">New Leads</div></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Pending Fee Collection</span></div>
+            <div class="stat-value text-warning mt-8" id="ov-fees">—</div>
+            <div class="text-muted fs-12 mt-4">Outstanding across all students</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Quick Export</span></div>
+            <div class="flex gap-8 mt-8">
+              <button class="btn btn-outline btn-sm" onclick="exportTable('att-tbody','attendance-report')">📥 Attendance CSV</button>
+              <button class="btn btn-outline btn-sm" onclick="exportTable('proj-tbody','task-violations')">📥 Task CSV</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Reports');
+
+  function showTab(name, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    ['attendance','projects','assessments','overview'].forEach(t =>
+      document.getElementById('tab-'+t).style.display = t===name ? '' : 'none'
+    );
+  }
+
+  async function loadAttendanceViolations() {
+    try {
+      const data = await api.get('/reports/attendance-violations');
+      document.getElementById('att-count').textContent = data.length;
+      const tbody = document.getElementById('att-tbody');
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">✅</div><h3>No Violations</h3><p>All students have &ge;75% attendance</p></div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(r => {
+        const risk = r.pct < 50 ? 'red' : r.pct < 65 ? 'yellow' : 'blue';
+        return `
+        <tr>
+          <td class="mono text-accent">${r.student_id}</td>
+          <td class="fw-600">${r.full_name}</td>
+          <td>${r.total}</td>
+          <td>${r.present}</td>
+          <td>
+            <div class="flex gap-8" style="align-items:center">
+              <div class="progress-bar" style="flex:1;width:80px"><div class="progress-fill" style="width:${r.pct}%;background:var(--${risk==='red'?'danger':risk==='yellow'?'warning':'accent'})"></div></div>
+              <span class="mono fw-600 text-${risk==='red'?'danger':risk==='yellow'?'warning':'accent'}">${r.pct}%</span>
+            </div>
+          </td>
+          <td><span class="badge badge-${risk}">${risk==='red'?'Critical':risk==='yellow'?'Warning':'Low'}</span></td>
+        </tr>`;
+      }).join('');
+    } catch(e) { document.getElementById('att-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:20px">API not available</td></tr>'; }
+  }
+
+  async function loadProjectViolations() {
+    try {
+      const data = await api.get('/reports/project-violations');
+      document.getElementById('proj-count').textContent = data.length;
+      const tbody = document.getElementById('proj-tbody');
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">✅</div><h3>No Overdue Tasks</h3></div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(t => {
+        const daysOverdue = Math.floor((new Date()-new Date(t.deadline))/(1000*60*60*24));
+        const priColor = {Low:'gray',Medium:'blue',High:'yellow',Critical:'red'};
+        return `
+        <tr>
+          <td>${t.full_name} <span class="mono text-muted fs-12">(${t.student_id})</span></td>
+          <td class="text-muted">${t.project_title}</td>
+          <td class="fw-600">${t.title}</td>
+          <td class="mono text-danger fs-12">${fmtDate(t.deadline)}</td>
+          <td><span class="badge badge-${priColor[t.priority]||'gray'}">${t.priority}</span></td>
+          <td class="text-danger fw-600">${daysOverdue}d</td>
+        </tr>`;
+      }).join('');
+    } catch(e) {}
+  }
+
+  async function loadAssessmentViolations() {
+    try {
+      const data = await api.get('/reports/assessment-violations');
+      document.getElementById('assess-count').textContent = data.length;
+      const tbody = document.getElementById('assess-tbody');
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">✅</div><h3>No Violations</h3></div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${r.full_name} <span class="mono text-muted fs-12">(${r.student_id})</span></td>
+          <td>${r.assessment_title}</td>
+          <td class="mono ${r.status==='Fail'?'text-danger':'text-muted'}">${r.score??'—'}</td>
+          <td class="mono text-muted">${r.pass_marks}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td class="text-muted">${fmtDate(r.submitted_at)}</td>
+        </tr>`).join('');
+    } catch(e) {}
+  }
+
+  async function loadOverview() {
+    try {
+      const s = await api.get('/reports/dashboard-stats');
+      document.getElementById('ov-students').textContent = s.total_students;
+      document.getElementById('ov-trainers').textContent = s.total_trainers;
+      document.getElementById('ov-batches').textContent = s.active_batches;
+      document.getElementById('ov-courses').textContent = s.total_courses;
+      document.getElementById('ov-jobs').textContent = s.open_jobs;
+      document.getElementById('ov-leads').textContent = s.new_leads;
+      document.getElementById('ov-fees').textContent = '₹' + Number(s.pending_fees||0).toLocaleString('en-IN');
+    } catch(e) {}
+  }
+
+  function exportTable(tbodyId, filename) {
+    const rows = document.querySelectorAll(`#${tbodyId} tr`);
+    const csv = Array.from(rows).map(row =>
+      Array.from(row.querySelectorAll('td')).map(td => `"${td.textContent.trim()}"`).join(',')
+    ).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${filename}.csv`;
+    a.click();
+    toast('Export started', 'success');
+  }
+
+  loadAttendanceViolations();
+  loadProjectViolations();
+  loadAssessmentViolations();
+  loadOverview();
+</script>
+</body>
+</html>

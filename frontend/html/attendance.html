@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attendance — Skill Track</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Attendance</span>
+        <span class="breadcrumb">Training / Attendance</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary" id="save-att-btn" onclick="saveAttendance()" style="display:none">💾 Save Attendance</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- Controls -->
+      <div class="card mb-20">
+        <div class="flex gap-16 flex-wrap">
+          <div class="form-group" style="min-width:200px;margin-bottom:0">
+            <label>Batch</label>
+            <select id="att-batch">
+              <option value="">Select batch…</option>
+            </select>
+          </div>
+          <div class="form-group" style="width:160px;margin-bottom:0">
+            <label>Date</label>
+            <input type="date" id="att-date" value="">
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="btn btn-primary" onclick="loadAttendanceSheet()">Load Sheet</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Attendance Sheet -->
+      <div class="card" id="attendance-card" style="display:none">
+        <div class="card-header">
+          <span class="card-title" id="att-card-title">Attendance Sheet</span>
+          <div class="flex gap-8">
+            <button class="btn btn-outline btn-sm" onclick="markAll('Present')">✓ All Present</button>
+            <button class="btn btn-outline btn-sm" onclick="markAll('Absent')">✕ All Absent</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="att-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Student ID</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>In Time</th>
+                <th>Out Time</th>
+              </tr>
+            </thead>
+            <tbody id="att-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Attendance Records -->
+      <div class="card mt-20">
+        <div class="card-header">
+          <span class="card-title">Attendance Records</span>
+          <div class="flex gap-8">
+            <select id="rec-batch" style="width:180px">
+              <option value="">All Batches</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="records-table">
+            <thead><tr><th>Date</th><th>Batch</th><th>Student</th><th>Status</th><th>In Time</th><th>Out Time</th><th>Duration</th></tr></thead>
+            <tbody id="records-tbody">
+              <tr><td colspan="7" class="text-center text-muted" style="padding:20px">Select batch and date to load records</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Attendance');
+  let batchStudents = [];
+
+  // Set today's date as default
+  document.getElementById('att-date').value = new Date().toISOString().split('T')[0];
+
+  async function loadBatchOptions() {
+    try {
+      const batches = await api.get('/batches/');
+      const opts = batches.map(b => `<option value="${b.id}">${b.batch_name} (${b.batch_code})</option>`).join('');
+      document.getElementById('att-batch').innerHTML = '<option value="">Select batch…</option>' + opts;
+      document.getElementById('rec-batch').innerHTML = '<option value="">All Batches</option>' + opts;
+    } catch(e) {}
+  }
+
+  async function loadAttendanceSheet() {
+    const batchId = document.getElementById('att-batch').value;
+    const date = document.getElementById('att-date').value;
+    if (!batchId || !date) { toast('Select batch and date', 'error'); return; }
+
+    try {
+      const batch = await api.get(`/batches/${batchId}`);
+      batchStudents = batch.students || [];
+
+      // Fetch existing attendance for this date/batch
+      const existing = await api.get(`/attendance/?batch_id=${batchId}&date=${date}`);
+      const existMap = {};
+      existing.forEach(r => { existMap[r.student_id] = r; });
+
+      document.getElementById('att-card-title').textContent = `${batch.batch_name} — ${fmtDate(date)}`;
+      document.getElementById('attendance-card').style.display = '';
+      document.getElementById('save-att-btn').style.display = '';
+
+      const tbody = document.getElementById('att-tbody');
+      tbody.innerHTML = batchStudents.map((s, i) => {
+        const rec = existMap[s.id] || {};
+        return `
+        <tr>
+          <td class="text-muted">${i+1}</td>
+          <td class="mono text-accent">${s.student_id}</td>
+          <td class="fw-600">${s.full_name}</td>
+          <td>
+            <select class="att-status" data-id="${s.id}" style="width:120px">
+              ${['Present','Absent','Late','Leave'].map(st =>
+                `<option ${(rec.status||'Absent')===st?'selected':''}>${st}</option>`
+              ).join('')}
+            </select>
+          </td>
+          <td><input type="time" class="att-in" data-id="${s.id}" value="${rec.in_time||''}" style="width:110px"></td>
+          <td><input type="time" class="att-out" data-id="${s.id}" value="${rec.out_time||''}" style="width:110px"></td>
+        </tr>`;
+      }).join('');
+
+      loadRecords();
+    } catch(e) {
+      toast('Failed to load attendance sheet: ' + e.message, 'error');
+    }
+  }
+
+  function markAll(status) {
+    document.querySelectorAll('.att-status').forEach(sel => sel.value = status);
+  }
+
+  async function saveAttendance() {
+    const batchId = document.getElementById('att-batch').value;
+    const date = document.getElementById('att-date').value;
+    const records = batchStudents.map(s => ({
+      batch_id: parseInt(batchId),
+      student_id: s.id,
+      date,
+      status: document.querySelector(`.att-status[data-id="${s.id}"]`)?.value || 'Absent',
+      in_time: document.querySelector(`.att-in[data-id="${s.id}"]`)?.value || null,
+      out_time: document.querySelector(`.att-out[data-id="${s.id}"]`)?.value || null,
+    }));
+
+    try {
+      await api.post('/attendance/', { records });
+      toast('Attendance saved successfully', 'success');
+      loadRecords();
+    } catch(e) {
+      toast('Save failed: ' + e.message, 'error');
+    }
+  }
+
+  async function loadRecords() {
+    const batchId = document.getElementById('rec-batch').value || document.getElementById('att-batch').value;
+    try {
+      const data = await api.get(`/attendance/?${batchId ? 'batch_id='+batchId : ''}`);
+      const tbody = document.getElementById('records-tbody');
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:20px">No records found</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.slice(0,50).map(r => {
+        let dur = '—';
+        if (r.in_time && r.out_time) {
+          const [ih,im] = r.in_time.split(':').map(Number);
+          const [oh,om] = r.out_time.split(':').map(Number);
+          const mins = (oh*60+om) - (ih*60+im);
+          dur = mins > 0 ? `${Math.floor(mins/60)}h ${mins%60}m` : '—';
+        }
+        return `
+        <tr>
+          <td>${fmtDate(r.date)}</td>
+          <td class="text-muted fs-12">${r.batch_name||'—'}</td>
+          <td>${r.full_name} <span class="mono text-muted fs-12">(${r.student_id})</span></td>
+          <td>${statusBadge(r.status)}</td>
+          <td class="mono text-muted">${r.in_time||'—'}</td>
+          <td class="mono text-muted">${r.out_time||'—'}</td>
+          <td class="mono">${dur}</td>
+        </tr>`;
+      }).join('');
+    } catch(e) {}
+  }
+
+  document.getElementById('rec-batch').addEventListener('change', loadRecords);
+
+  loadBatchOptions();
+  loadRecords();
+</script>
+</body>
+</html>

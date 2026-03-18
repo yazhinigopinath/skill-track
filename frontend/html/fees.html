@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fees — Skill Track</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Fee Management</span>
+        <span class="breadcrumb">Admin / Fees</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary" onclick="openModal('add-fee-modal')">+ Add Fee Record</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="stats-grid mb-20">
+        <div class="stat-card green"><div class="stat-icon">💰</div><div class="stat-value" id="f-collected">—</div><div class="stat-label">Collected</div></div>
+        <div class="stat-card red"><div class="stat-icon">⏳</div><div class="stat-value" id="f-pending">—</div><div class="stat-label">Pending</div></div>
+        <div class="stat-card yellow"><div class="stat-icon">📋</div><div class="stat-value" id="f-count">—</div><div class="stat-label">Total Records</div></div>
+      </div>
+      <div class="toolbar">
+        <div class="search-box"><span class="search-icon">🔍</span><input type="text" id="search-input" placeholder="Search fees…"></div>
+        <select id="status-filter" style="width:140px">
+          <option value="">All Status</option>
+          <option>Pending</option><option>Partial</option><option>Paid</option><option>Overdue</option>
+        </select>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Receipt</th><th>Student</th><th>Batch</th><th>Amount</th><th>Paid</th><th>Due Date</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="fees-tbody"><tr><td colspan="8" class="text-center" style="padding:40px"><span class="spinner"></span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="add-fee-modal">
+  <div class="modal">
+    <div class="modal-header"><h3>Add Fee Record</h3><button class="btn btn-icon btn-outline" onclick="closeModal('add-fee-modal')">✕</button></div>
+    <div class="modal-body">
+      <div id="fee-alert"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Student *</label><select id="f-student" required><option value="">Select student</option></select></div>
+        <div class="form-group"><label>Batch *</label><select id="f-batch" required><option value="">Select batch</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Total Amount (₹) *</label><input type="number" id="f-amount" required min="0"></div>
+        <div class="form-group"><label>Due Date</label><input type="date" id="f-due"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('add-fee-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFee()">Create</button>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="pay-modal">
+  <div class="modal">
+    <div class="modal-header"><h3>Record Payment</h3><button class="btn btn-icon btn-outline" onclick="closeModal('pay-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="pay-fee-id">
+      <div class="form-row">
+        <div class="form-group"><label>Amount (₹) *</label><input type="number" id="pay-amount" min="1" required></div>
+        <div class="form-group"><label>Mode</label><select id="pay-mode"><option>Cash</option><option>Card</option><option>UPI</option><option>Bank Transfer</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('pay-modal')">Cancel</button>
+      <button class="btn btn-success" onclick="recordPayment()">💰 Record Payment</button>
+    </div>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Fees');
+  let allFees = [];
+  async function loadFees() {
+    try {
+      allFees = await api.get('/fees/');
+      renderFees(allFees);
+      const col = allFees.reduce((a,f)=>a+(f.paid_amount||0),0);
+      const pen = allFees.reduce((a,f)=>a+(f.amount-(f.paid_amount||0)),0);
+      document.getElementById('f-collected').textContent='₹'+col.toLocaleString('en-IN');
+      document.getElementById('f-pending').textContent='₹'+Math.max(0,pen).toLocaleString('en-IN');
+      document.getElementById('f-count').textContent=allFees.length;
+    } catch(e) {}
+  }
+  function renderFees(data) {
+    const tbody = document.getElementById('fees-tbody');
+    if (!data.length) { tbody.innerHTML='<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">💰</div><h3>No Records</h3></div></td></tr>'; return; }
+    tbody.innerHTML = data.map(f=>`<tr>
+      <td class="mono text-accent">${f.receipt_number}</td>
+      <td><div class="fw-600">${f.full_name}</div><div class="mono text-muted fs-12">${f.student_id}</div></td>
+      <td class="text-muted fs-12">${f.batch_name}</td>
+      <td class="fw-600">₹${Number(f.amount).toLocaleString('en-IN')}</td>
+      <td class="text-success">₹${Number(f.paid_amount||0).toLocaleString('en-IN')}</td>
+      <td class="text-muted">${fmtDate(f.due_date)}</td>
+      <td>${statusBadge(f.status)}</td>
+      <td>${f.status!=='Paid'?`<button class="btn btn-success btn-sm" onclick="openPayModal(${f.id})">Pay</button>`:'<span class="text-success fs-12">✓ Paid</span>'}</td>
+    </tr>`).join('');
+  }
+  function openPayModal(id) { document.getElementById('pay-fee-id').value=id; openModal('pay-modal'); }
+  async function recordPayment() {
+    try {
+      const res = await api.post(`/fees/${document.getElementById('pay-fee-id').value}/pay`,{amount:parseFloat(document.getElementById('pay-amount').value),payment_mode:document.getElementById('pay-mode').value});
+      toast('Payment recorded — '+res.status,'success'); closeModal('pay-modal'); loadFees();
+    } catch(e) { toast(e.message,'error'); }
+  }
+  async function saveFee() {
+    try {
+      await api.post('/fees/',{student_id:document.getElementById('f-student').value,batch_id:document.getElementById('f-batch').value,amount:parseFloat(document.getElementById('f-amount').value),due_date:document.getElementById('f-due').value});
+      toast('Fee record created','success'); closeModal('add-fee-modal'); loadFees();
+    } catch(e) { document.getElementById('fee-alert').innerHTML=`<div class="alert alert-danger">${e.message}</div>`; }
+  }
+  async function loadDropdowns() {
+    try {
+      const [s,b]=await Promise.all([api.get('/students/'),api.get('/batches/')]);
+      document.getElementById('f-student').innerHTML='<option value="">Select student</option>'+s.map(x=>`<option value="${x.id}">${x.full_name} (${x.student_id})</option>`).join('');
+      document.getElementById('f-batch').innerHTML='<option value="">Select batch</option>'+b.map(x=>`<option value="${x.id}">${x.batch_name}</option>`).join('');
+    } catch(e) {}
+  }
+  document.getElementById('search-input').addEventListener('input',()=>{
+    const q=document.getElementById('search-input').value.toLowerCase();
+    const s=document.getElementById('status-filter').value;
+    renderFees(allFees.filter(f=>(!q||(f.full_name+f.receipt_number).toLowerCase().includes(q))&&(!s||f.status===s)));
+  });
+  document.getElementById('status-filter').addEventListener('change',()=>document.getElementById('search-input').dispatchEvent(new Event('input')));
+  loadFees(); loadDropdowns();
+</script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assessments — Skill Track</title>
+<link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">Assessments</div>
+        <span class="breadcrumb">/ tests &amp; evaluations</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary btn-sm" onclick="openModal('assess-modal')">+ New Assessment</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="filterType('')">All</button>
+        <button class="tab-btn" onclick="filterType('Coding')">Coding</button>
+        <button class="tab-btn" onclick="filterType('Aptitude')">Aptitude</button>
+        <button class="tab-btn" onclick="filterType('Mock Interview')">Mock Interview</button>
+        <button class="tab-btn" onclick="filterType('Communication')">Communication</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="assess-search" placeholder="Search assessments…">
+        </div>
+      </div>
+
+      <div id="assess-cards" class="grid-3" style="gap:16px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Assessment Modal -->
+<div class="modal-backdrop" id="assess-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>New Assessment</h3>
+      <button class="btn btn-outline btn-icon" onclick="closeModal('assess-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label>Title</label><input type="text" id="a_title" required></div>
+      <div class="form-row">
+        <div class="form-group"><label>Type</label>
+          <select id="a_type">
+            <option>Aptitude</option><option>Coding</option>
+            <option>Mock Interview</option><option>Communication</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Batch ID</label><input type="number" id="a_batch" placeholder="Optional"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Total Marks</label><input type="number" id="a_total" value="100"></div>
+        <div class="form-group"><label>Pass Marks</label><input type="number" id="a_pass" value="40"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Duration (min)</label><input type="number" id="a_duration" value="60"></div>
+        <div class="form-group"><label>Scheduled At</label><input type="datetime-local" id="a_scheduled"></div>
+      </div>
+      <div class="form-group"><label>Description</label><textarea id="a_desc"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('assess-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAssessment()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Result Modal -->
+<div class="modal-backdrop" id="result-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Submit Result</h3>
+      <button class="btn btn-outline btn-icon" onclick="closeModal('result-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="r_assess_id">
+      <div class="form-row">
+        <div class="form-group"><label>Student ID</label><input type="number" id="r_student_id"></div>
+        <div class="form-group"><label>Score</label><input type="number" id="r_score"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('result-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitResult()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Assessments');
+  let assessments = [], currentType = '';
+
+  async function loadAssessments() {
+    try {
+      assessments = await api.get('/assessments/');
+      renderAssessments();
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  function filterType(t) {
+    currentType = t;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    renderAssessments();
+  }
+
+  function renderAssessments() {
+    const q = document.getElementById('assess-search').value.toLowerCase();
+    const list = assessments.filter(a =>
+      (!currentType || a.assessment_type === currentType) &&
+      (!q || a.title.toLowerCase().includes(q))
+    );
+    const container = document.getElementById('assess-cards');
+    if (!list.length) { container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">📝</div><h3>No Assessments</h3></div>'; return; }
+    const typeColors = { Coding:'blue', Aptitude:'purple', 'Mock Interview':'green', Communication:'yellow' };
+    container.innerHTML = list.map(a => `
+      <div class="card">
+        <div class="flex-between mb-16">
+          <span class="badge badge-${typeColors[a.assessment_type]||'gray'}">${a.assessment_type}</span>
+          ${statusBadge(a.status)}
+        </div>
+        <h3 style="margin-bottom:6px">${a.title}</h3>
+        <p class="text-muted fs-12 mb-16">${a.batch_name||'All Batches'}</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px">
+          <span>🎯 Pass: ${a.pass_marks}/${a.total_marks}</span>
+          <span>⏱ ${a.duration_minutes} min</span>
+          <span>📅 ${fmtDateTime(a.scheduled_at)}</span>
+        </div>
+        <button class="btn btn-outline btn-sm w-full" onclick="openResultModal(${a.id})">+ Submit Result</button>
+      </div>`).join('');
+  }
+
+  async function saveAssessment() {
+    try {
+      await api.post('/assessments/', {
+        title: document.getElementById('a_title').value,
+        assessment_type: document.getElementById('a_type').value,
+        batch_id: +document.getElementById('a_batch').value || null,
+        total_marks: +document.getElementById('a_total').value,
+        pass_marks: +document.getElementById('a_pass').value,
+        duration_minutes: +document.getElementById('a_duration').value,
+        scheduled_at: document.getElementById('a_scheduled').value,
+        description: document.getElementById('a_desc').value,
+      });
+      toast('Assessment created','success'); closeModal('assess-modal'); loadAssessments();
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  function openResultModal(aid) {
+    document.getElementById('r_assess_id').value = aid;
+    openModal('result-modal');
+  }
+
+  async function submitResult() {
+    const aid = document.getElementById('r_assess_id').value;
+    try {
+      const res = await api.post(`/assessments/${aid}/results`, {
+        student_id: +document.getElementById('r_student_id').value,
+        score: +document.getElementById('r_score').value,
+      });
+      toast(`Result: ${res.status}`,'success'); closeModal('result-modal');
+    } catch(e) { toast(e.message,'error'); }
+  }
+
+  document.getElementById('assess-search').addEventListener('input', renderAssessments);
+  loadAssessments();
+</script>
+</body>
+</html>

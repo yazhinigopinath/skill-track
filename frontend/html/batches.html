@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Batches — Skill Track</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Batches</span>
+        <span class="breadcrumb">Admin / Batches</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary" onclick="openModal('add-batch-modal')">+ New Batch</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="filterBatches('',this)">All</button>
+        <button class="tab-btn" onclick="filterBatches('Upcoming',this)">Upcoming</button>
+        <button class="tab-btn" onclick="filterBatches('Ongoing',this)">Ongoing</button>
+        <button class="tab-btn" onclick="filterBatches('Completed',this)">Completed</button>
+      </div>
+
+      <div id="batches-container" class="grid-3">
+        <div class="text-muted text-center" style="grid-column:span 3;padding:40px"><span class="spinner"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Batch Modal -->
+<div class="modal-backdrop" id="add-batch-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Create New Batch</h3>
+      <button class="btn btn-icon btn-outline" onclick="closeModal('add-batch-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="batch-alert"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Batch Code *</label>
+          <input type="text" id="b-code" placeholder="PY101-B2" required>
+        </div>
+        <div class="form-group">
+          <label>Batch Name *</label>
+          <input type="text" id="b-name" placeholder="Python Batch Jan 2025" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Course *</label>
+          <select id="b-course" required><option value="">Loading…</option></select>
+        </div>
+        <div class="form-group">
+          <label>Trainer</label>
+          <select id="b-trainer"><option value="">Select Trainer</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Start Date</label>
+          <input type="date" id="b-start">
+        </div>
+        <div class="form-group">
+          <label>End Date</label>
+          <input type="date" id="b-end">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Meeting Link</label>
+        <input type="url" id="b-meeting" placeholder="https://meet.google.com/...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('add-batch-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBatch()">Create Batch</button>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Detail Modal -->
+<div class="modal-backdrop" id="batch-detail-modal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <h3 id="detail-batch-name">Batch Details</h3>
+      <button class="btn btn-icon btn-outline" onclick="closeModal('batch-detail-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="batch-detail-body">Loading…</div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Batches');
+  let allBatches = [];
+
+  async function loadBatches() {
+    try {
+      allBatches = await api.get('/batches/');
+      renderBatches(allBatches);
+    } catch(e) {
+      document.getElementById('batches-container').innerHTML =
+        '<div class="text-muted text-center" style="grid-column:span 3;padding:40px">Failed to load batches.</div>';
+    }
+  }
+
+  function renderBatches(data) {
+    const container = document.getElementById('batches-container');
+    if (!data.length) {
+      container.innerHTML = '<div class="empty-state" style="grid-column:span 3"><div class="empty-icon">🗂</div><h3>No Batches</h3><p>Create your first batch to get started</p></div>';
+      return;
+    }
+    container.innerHTML = data.map(b => {
+      const progress = calcProgress(b.start_date, b.end_date);
+      return `
+      <div class="card" style="cursor:pointer" onclick="viewBatch(${b.id})">
+        <div class="flex-between mb-16">
+          <span class="mono fs-12 text-accent">${b.batch_code}</span>
+          ${statusBadge(b.status)}
+        </div>
+        <div class="fw-700" style="font-size:15px;margin-bottom:4px">${b.batch_name}</div>
+        <div class="text-muted fs-12 mb-16">${b.course_title}</div>
+        <div class="flex gap-16 text-muted fs-12 mb-12">
+          <span>🎓 ${b.trainer_name||'No trainer'}</span>
+          <span>👥 ${b.student_count||0} students</span>
+        </div>
+        <div class="flex-between text-muted fs-12 mb-4">
+          <span>${fmtDate(b.start_date)}</span>
+          <span>${progress}%</span>
+          <span>${fmtDate(b.end_date)}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${progress}%"></div>
+        </div>
+        ${b.meeting_link ? `<a href="${b.meeting_link}" target="_blank" class="btn btn-outline btn-sm mt-16 w-full" onclick="event.stopPropagation()">🔗 Join Session</a>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function calcProgress(start, end) {
+    if (!start || !end) return 0;
+    const s = new Date(start), e = new Date(end), n = new Date();
+    return Math.min(100, Math.max(0, Math.round((n-s)/(e-s)*100)));
+  }
+
+  function filterBatches(status, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderBatches(status ? allBatches.filter(b => b.status===status) : allBatches);
+  }
+
+  async function viewBatch(id) {
+    const body = document.getElementById('batch-detail-body');
+    body.innerHTML = '<div class="text-center"><span class="spinner"></span></div>';
+    openModal('batch-detail-modal');
+    try {
+      const b = await api.get(`/batches/${id}`);
+      document.getElementById('detail-batch-name').textContent = b.batch_name;
+      body.innerHTML = `
+        <div class="grid-2 mb-16">
+          <div><div class="text-muted fs-12 mono mb-4">COURSE</div><div class="fw-600">${b.course_title}</div></div>
+          <div><div class="text-muted fs-12 mono mb-4">TRAINER</div><div class="fw-600">${b.trainer_name||'TBD'}</div></div>
+          <div><div class="text-muted fs-12 mono mb-4">START DATE</div><div>${fmtDate(b.start_date)}</div></div>
+          <div><div class="text-muted fs-12 mono mb-4">END DATE</div><div>${fmtDate(b.end_date)}</div></div>
+        </div>
+        ${b.meeting_link ? `<div class="mb-16"><div class="text-muted fs-12 mono mb-4">MEETING LINK</div><a href="${b.meeting_link}" target="_blank" class="text-accent">${b.meeting_link}</a></div>` : ''}
+        <div class="card-title mb-8">Students (${b.students?.length||0})</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Status</th></tr></thead>
+            <tbody>${(b.students||[]).map(s=>`
+              <tr>
+                <td class="mono text-accent">${s.student_id}</td>
+                <td>${s.full_name}</td>
+                <td class="text-muted">${s.email}</td>
+                <td>${statusBadge(s.status)}</td>
+              </tr>`).join('')||'<tr><td colspan="4" class="text-center text-muted" style="padding:16px">No students enrolled</td></tr>'}
+            </tbody>
+          </table>
+        </div>`;
+    } catch(e) { body.innerHTML = `<div class="alert alert-danger">${e.message}</div>`; }
+  }
+
+  async function loadDropdowns() {
+    try {
+      const [courses, trainers] = await Promise.all([api.get('/courses/'), api.get('/trainers/')]);
+      document.getElementById('b-course').innerHTML = '<option value="">Select Course</option>' +
+        courses.map(c => `<option value="${c.id}">${c.title}</option>`).join('');
+      document.getElementById('b-trainer').innerHTML = '<option value="">Select Trainer</option>' +
+        trainers.map(t => `<option value="${t.id}">${t.full_name}</option>`).join('');
+    } catch(e) {}
+  }
+
+  async function saveBatch() {
+    try {
+      await api.post('/batches/', {
+        batch_code: document.getElementById('b-code').value,
+        batch_name: document.getElementById('b-name').value,
+        course_id: document.getElementById('b-course').value,
+        trainer_id: document.getElementById('b-trainer').value || null,
+        start_date: document.getElementById('b-start').value,
+        end_date: document.getElementById('b-end').value,
+        meeting_link: document.getElementById('b-meeting').value,
+      });
+      toast('Batch created successfully', 'success');
+      closeModal('add-batch-modal');
+      loadBatches();
+    } catch(e) {
+      document.getElementById('batch-alert').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    }
+  }
+
+  loadBatches();
+  loadDropdowns();
+</script>
+</body>
+</html>

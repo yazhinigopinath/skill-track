@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projects — Skill Track</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Projects & Tasks</span>
+        <span class="breadcrumb">Training / Projects</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary" onclick="openModal('add-project-modal')">+ New Project</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="grid-2" id="projects-container">
+        <div class="text-muted text-center" style="grid-column:span 2;padding:40px"><span class="spinner"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Project Modal -->
+<div class="modal-backdrop" id="add-project-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Create Project</h3>
+      <button class="btn btn-icon btn-outline" onclick="closeModal('add-project-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="proj-alert"></div>
+      <div class="form-group">
+        <label>Project Title *</label>
+        <input type="text" id="p-title" required placeholder="E-commerce Website">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Batch</label>
+          <select id="p-batch"><option value="">Select batch</option></select>
+        </div>
+        <div class="form-group">
+          <label>Deadline</label>
+          <input type="date" id="p-deadline">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="p-desc" rows="3" placeholder="Project overview and goals…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('add-project-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProject()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tasks Modal -->
+<div class="modal-backdrop" id="tasks-modal">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h3 id="tasks-modal-title">Tasks</h3>
+      <button class="btn btn-icon btn-outline" onclick="closeModal('tasks-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Add Task Form -->
+      <div class="card mb-16" style="background:var(--bg3)">
+        <div class="card-title mb-12">Assign New Task</div>
+        <div id="task-alert"></div>
+        <input type="hidden" id="t-project-id">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Task Title *</label>
+            <input type="text" id="t-title" placeholder="Build login page">
+          </div>
+          <div class="form-group">
+            <label>Student</label>
+            <select id="t-student"><option value="">Select student</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Deadline</label>
+            <input type="datetime-local" id="t-deadline">
+          </div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="t-priority">
+              <option>Low</option><option selected>Medium</option>
+              <option>High</option><option>Critical</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="t-desc" rows="2" placeholder="Task details…"></textarea>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="saveTask()">Assign Task</button>
+      </div>
+
+      <!-- Task List -->
+      <div class="card-title mb-8">Tasks</div>
+      <div class="table-wrap">
+        <table id="tasks-table">
+          <thead><tr><th>Title</th><th>Student</th><th>Deadline</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="tasks-tbody">
+            <tr><td colspan="6" class="text-center text-muted" style="padding:16px">No tasks yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Projects');
+  let allProjects = [], currentProjectId = null;
+
+  async function loadProjects() {
+    try {
+      allProjects = await api.get('/projects/');
+      renderProjects(allProjects);
+    } catch(e) {
+      document.getElementById('projects-container').innerHTML =
+        '<div class="text-muted text-center" style="grid-column:span 2;padding:40px">Failed to load projects</div>';
+    }
+  }
+
+  function renderProjects(data) {
+    const container = document.getElementById('projects-container');
+    if (!data.length) {
+      container.innerHTML = '<div class="empty-state" style="grid-column:span 2"><div class="empty-icon">📁</div><h3>No Projects</h3><p>Create your first project</p></div>';
+      return;
+    }
+    container.innerHTML = data.map(p => `
+      <div class="card">
+        <div class="flex-between mb-12">
+          <div class="fw-700">${p.title}</div>
+          ${statusBadge(p.status)}
+        </div>
+        <div class="text-muted fs-13 mb-12">${p.description||'No description'}</div>
+        <div class="flex gap-12 text-muted fs-12 mb-16">
+          <span>🗂 ${p.batch_name||'No batch'}</span>
+          <span>📋 ${p.task_count||0} tasks</span>
+          ${p.deadline ? `<span>📅 ${fmtDate(p.deadline)}</span>` : ''}
+        </div>
+        <div class="flex gap-8">
+          <button class="btn btn-primary btn-sm" onclick="openTasks(${p.id}, '${p.title}')">Manage Tasks</button>
+        </div>
+      </div>`).join('');
+  }
+
+  async function openTasks(projectId, projectTitle) {
+    currentProjectId = projectId;
+    document.getElementById('tasks-modal-title').textContent = `Tasks — ${projectTitle}`;
+    document.getElementById('t-project-id').value = projectId;
+    openModal('tasks-modal');
+    loadTasks(projectId);
+    loadTaskStudents();
+  }
+
+  async function loadTasks(pid) {
+    try {
+      const tasks = await api.get(`/projects/${pid}/tasks`);
+      const tbody = document.getElementById('tasks-tbody');
+      if (!tasks.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:16px">No tasks assigned</td></tr>';
+        return;
+      }
+      const priorityColors = {Low:'gray',Medium:'blue',High:'yellow',Critical:'red'};
+      tbody.innerHTML = tasks.map(t => {
+        const isOverdue = t.deadline && new Date(t.deadline) < new Date() && t.status !== 'Completed';
+        return `
+        <tr${isOverdue?' style="background:rgba(239,68,68,0.05)"':''}>
+          <td>
+            ${t.title}
+            ${isOverdue ? '<span class="badge badge-red" style="margin-left:6px">Overdue</span>' : ''}
+          </td>
+          <td class="text-muted">${t.student_name}</td>
+          <td class="mono fs-12 ${isOverdue?'text-danger':''}">${fmtDateTime(t.deadline)}</td>
+          <td><span class="badge badge-${priorityColors[t.priority]||'gray'}">${t.priority}</span></td>
+          <td>${statusBadge(t.status)}</td>
+          <td>
+            <select onchange="updateTaskStatus(${t.id}, this.value)" style="width:130px;font-size:12px">
+              ${['Assigned','In Progress','Completed','Overdue'].map(s =>
+                `<option${s===t.status?' selected':''}>${s}</option>`
+              ).join('')}
+            </select>
+          </td>
+        </tr>`;
+      }).join('');
+    } catch(e) { console.error(e); }
+  }
+
+  async function loadTaskStudents() {
+    try {
+      const p = allProjects.find(x => x.id === currentProjectId);
+      if (!p?.batch_id) return;
+      const batch = await api.get(`/batches/${p.batch_id}`);
+      const select = document.getElementById('t-student');
+      select.innerHTML = '<option value="">Select student</option>' +
+        (batch.students||[]).map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
+    } catch(e) {}
+  }
+
+  async function saveTask() {
+    const pid = document.getElementById('t-project-id').value;
+    try {
+      await api.post(`/projects/${pid}/tasks`, {
+        title: document.getElementById('t-title').value,
+        student_id: document.getElementById('t-student').value,
+        deadline: document.getElementById('t-deadline').value,
+        priority: document.getElementById('t-priority').value,
+        description: document.getElementById('t-desc').value,
+      });
+      toast('Task assigned', 'success');
+      document.getElementById('t-title').value = '';
+      document.getElementById('t-desc').value = '';
+      loadTasks(pid);
+      loadProjects();
+    } catch(e) {
+      document.getElementById('task-alert').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    }
+  }
+
+  async function updateTaskStatus(taskId, status) {
+    try {
+      await api.put(`/projects/tasks/${taskId}`, { status });
+      toast('Task status updated', 'success');
+      loadTasks(currentProjectId);
+    } catch(e) { toast(e.message, 'error'); }
+  }
+
+  async function saveProject() {
+    const batches = await api.get('/batches/').catch(()=>[]);
+    try {
+      const bid = document.getElementById('p-batch').value;
+      await api.post('/projects/', {
+        title: document.getElementById('p-title').value,
+        description: document.getElementById('p-desc').value,
+        batch_id: bid || null,
+        deadline: document.getElementById('p-deadline').value,
+      });
+      toast('Project created', 'success');
+      closeModal('add-project-modal');
+      loadProjects();
+    } catch(e) {
+      document.getElementById('proj-alert').innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    }
+  }
+
+  async function loadBatchOptions() {
+    try {
+      const batches = await api.get('/batches/');
+      document.getElementById('p-batch').innerHTML = '<option value="">No batch</option>' +
+        batches.map(b => `<option value="${b.id}">${b.batch_name}</option>`).join('');
+    } catch(e) {}
+  }
+
+  loadProjects();
+  loadBatchOptions();
+</script>
+</body>
+</html>

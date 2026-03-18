@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trainer Dashboard — Skill Track</title>
+<link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="app-shell" id="app-shell">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">Trainer Dashboard</div>
+        <span class="breadcrumb">/ overview</span>
+      </div>
+      <div class="topbar-right">
+        <span class="mono fs-12 text-muted" id="current-date"></span>
+      </div>
+    </div>
+    <div class="page-content">
+
+      <div class="mb-20">
+        <h2 id="welcome-msg">Welcome back 👋</h2>
+        <p class="text-muted fs-13">Here's your training overview for today.</p>
+      </div>
+
+      <div class="stats-grid" id="trainer-stats">
+        <div class="stat-card blue"><div class="stat-icon">🗂</div><div class="stat-value" id="s-batches">—</div><div class="stat-label">My Batches</div></div>
+        <div class="stat-card green"><div class="stat-icon">👥</div><div class="stat-value" id="s-students">—</div><div class="stat-label">Students</div></div>
+        <div class="stat-card yellow"><div class="stat-icon">📁</div><div class="stat-value" id="s-projects">—</div><div class="stat-label">Active Projects</div></div>
+        <div class="stat-card purple"><div class="stat-icon">📝</div><div class="stat-value" id="s-assessments">—</div><div class="stat-label">Assessments</div></div>
+      </div>
+
+      <div class="grid-2" style="gap:20px">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">My Batches</div>
+            <a href="batches.html" class="btn btn-outline btn-sm">View All</a>
+          </div>
+          <div id="trainer-batches">
+            <div class="text-center text-muted" style="padding:32px">Loading…</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Recent Projects</div>
+            <a href="projects.html" class="btn btn-outline btn-sm">Manage</a>
+          </div>
+          <div id="trainer-projects">
+            <div class="text-center text-muted" style="padding:32px">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-20">
+        <div class="card-header">
+          <div class="card-title">Quick Actions</div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <a href="attendance.html" class="btn btn-outline">✅ Mark Attendance</a>
+          <a href="projects.html" class="btn btn-outline">📁 Assign Tasks</a>
+          <a href="assessments.html" class="btn btn-outline">📝 Create Assessment</a>
+          <a href="reports.html" class="btn btn-outline">📊 View Reports</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>
+  initPage('Dashboard');
+  document.getElementById('current-date').textContent = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  const user = Auth.getUser();
+  if (user) document.getElementById('welcome-msg').textContent = `Welcome back, ${user.username} 👋`;
+
+  async function loadDashboard() {
+    try {
+      const [batches, projects, assessments] = await Promise.all([
+        api.get('/batches/'),
+        api.get('/projects/'),
+        api.get('/assessments/'),
+      ]);
+
+      document.getElementById('s-batches').textContent = batches.filter(b=>b.status==='Ongoing').length;
+      document.getElementById('s-projects').textContent = projects.filter(p=>p.status==='Active').length;
+      document.getElementById('s-assessments').textContent = assessments.length;
+
+      const studentSet = new Set();
+      batches.forEach(b => { if(b.student_count) for(let i=0;i<b.student_count;i++) studentSet.add(`${b.id}-${i}`); });
+      document.getElementById('s-students').textContent = batches.reduce((s,b)=>s+(+b.student_count||0),0);
+
+      // Render batches
+      const batchEl = document.getElementById('trainer-batches');
+      const ongoing = batches.filter(b=>b.status==='Ongoing').slice(0,5);
+      batchEl.innerHTML = ongoing.length ? ongoing.map(b=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div><div class="fw-600 fs-13">${b.batch_name}</div><div class="mono fs-12 text-muted">${b.course_title}</div></div>
+          <div style="text-align:right"><div class="mono fs-12">${b.student_count||0} students</div>${statusBadge(b.status)}</div>
+        </div>`).join('') : '<div class="text-center text-muted" style="padding:24px">No ongoing batches</div>';
+
+      // Render projects
+      const projEl = document.getElementById('trainer-projects');
+      const activeProj = projects.filter(p=>p.status==='Active').slice(0,5);
+      projEl.innerHTML = activeProj.length ? activeProj.map(p=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div><div class="fw-600 fs-13">${p.title}</div><div class="mono fs-12 text-muted">${p.batch_name||'—'} · ${p.task_count||0} tasks</div></div>
+          <div>${fmtDate(p.deadline)}</div>
+        </div>`).join('') : '<div class="text-center text-muted" style="padding:24px">No active projects</div>';
+
+    } catch(e) { toast(e.message,'error'); }
+  }
+  loadDashboard();
+</script>
+</body>
+</html>

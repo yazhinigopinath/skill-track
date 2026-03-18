@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Skill Track</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h1>⬡ Skill Track</h1>
+      <p>Training Institute Management System</p>
+    </div>
+
+    <div id="alert-box"></div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="email" placeholder="you@skilltrack.com" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary w-full" id="login-btn" style="margin-top:8px;padding:11px;">
+        Sign In
+      </button>
+    </form>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <p class="text-muted fs-12 text-center mb-16">Demo Credentials</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn btn-outline btn-sm" onclick="fillDemo('admin@skilltrack.com','Admin@123')">Admin</button>
+        <button class="btn btn-outline btn-sm" onclick="fillDemo('trainer@skilltrack.com','Trainer@123')">Trainer</button>
+        <button class="btn btn-outline btn-sm" onclick="fillDemo('student@skilltrack.com','Student@123')">Student</button>
+        <button class="btn btn-outline btn-sm" onclick="fillDemo('marketer@skilltrack.com','Marketer@123')">Marketer</button>
+      </div>
+    </div>
+
+    <p class="text-center text-muted fs-12 mt-16">
+      Don't have an account? <a href="register.html" class="text-accent">Register</a>
+    </p>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+  // Redirect if already logged in
+  if (Auth.isLoggedIn()) {
+    const role = Auth.getUser()?.role;
+    redirectByRole(role);
+  }
+
+  function redirectByRole(role) {
+    const map = {
+      admin: 'admin-dashboard.html',
+      super_admin: 'admin-dashboard.html',
+      trainer: 'trainer-dashboard.html',
+      student: 'student-dashboard.html',
+      marketer: 'marketer-dashboard.html',
+    };
+    window.location.href = map[role] || 'admin-dashboard.html';
+  }
+
+  function fillDemo(email, pw) {
+    document.getElementById('email').value = email;
+    document.getElementById('password').value = pw;
+  }
+
+  function showAlert(msg, type = 'danger') {
+    document.getElementById('alert-box').innerHTML =
+      `<div class="alert alert-${type}">${msg}</div>`;
+  }
+
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('login-btn');
+    btn.innerHTML = '<span class="spinner"></span> Signing in…';
+    btn.disabled = true;
+    document.getElementById('alert-box').innerHTML = '';
+
+    try {
+      const data = await api.post('/auth/login', {
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+      });
+      Auth.setSession(data.access_token, data.user);
+      toast('Welcome back!', 'success');
+      setTimeout(() => redirectByRole(data.user.role), 400);
+    } catch (err) {
+      showAlert(err.message || 'Login failed. Check your credentials.');
+      btn.innerHTML = 'Sign In';
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
