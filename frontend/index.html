@@ -72,26 +72,42 @@
 
   function showAlert(msg, type = 'danger') {
     document.getElementById('alert-box').innerHTML =
-      `<div class="alert alert-${type}">${msg}</div>`;
+      <div class="alert alert-${type}">${msg}</div>;
   }
 
-  document.getElementById('login-form').addEventListener('submit', async (e) => {
+  // 🔥 DEMO LOGIN (NO BACKEND)
+  document.getElementById('login-form').addEventListener('submit', (e) => {
     e.preventDefault();
+
     const btn = document.getElementById('login-btn');
     btn.innerHTML = '<span class="spinner"></span> Signing in…';
     btn.disabled = true;
-    document.getElementById('alert-box').innerHTML = '';
 
-    try {
-      const data = await api.post('/auth/login', {
-        email: document.getElementById('email').value,
-        password: document.getElementById('password').value,
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+
+    const users = {
+      "admin@skilltrack.com": { password: "Admin@123", role: "admin" },
+      "trainer@skilltrack.com": { password: "Trainer@123", role: "trainer" },
+      "student@skilltrack.com": { password: "Student@123", role: "student" },
+      "marketer@skilltrack.com": { password: "Marketer@123", role: "marketer" }
+    };
+
+    if (users[email] && users[email].password === password) {
+      Auth.setSession("demo-token", {
+        email: email,
+        role: users[email].role,
+        username: email.split("@")[0]
       });
-      Auth.setSession(data.access_token, data.user);
-      toast('Welcome back!', 'success');
-      setTimeout(() => redirectByRole(data.user.role), 400);
-    } catch (err) {
-      showAlert(err.message || 'Login failed. Check your credentials.');
+
+      toast('Login successful!', 'success');
+
+      setTimeout(() => {
+        redirectByRole(users[email].role);
+      }, 500);
+
+    } else {
+      showAlert("Invalid credentials");
       btn.innerHTML = 'Sign In';
       btn.disabled = false;
     }
