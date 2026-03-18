@@ -46,7 +46,20 @@
   </div>
 </div>
 
-<script src="/frontend/js/app.js"></script>
+<script>
+const Auth = {
+  setSession: (token, user) => {
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
+  },
+  isLoggedIn: () => !!localStorage.getItem("token"),
+  getUser: () => JSON.parse(localStorage.getItem("user"))
+};
+
+function toast(msg) {
+  alert(msg);
+}
+</script>
 <script>
   if (typeof Auth === "undefined") {
   alert("app.js not loaded");
