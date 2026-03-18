@@ -46,8 +46,15 @@
   </div>
 </div>
 
-<script src="../js/app.js"></script>
+<script src="/frontend/js/app.js"></script>
 <script>
+  if (typeof Auth === "undefined") {
+  alert("app.js not loaded");
+}
+document.getElementById('login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  alert("Button working");
+});
 window.addEventListener('DOMContentLoaded', () => {
 
   // Redirect if already logged in
